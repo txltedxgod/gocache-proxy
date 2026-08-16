@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  cache-proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    command: ["-listen=:8080", "-upstream=http://mock-api:8000", "-ttl=30s"]
+    depends_on:
+      - mock-api
+
+  mock-api:
+    image: hashicorp/http-echo:latest
+    command: ["-text=Hello from origin backend!"]
+    ports:
+      - "8000:5678"
