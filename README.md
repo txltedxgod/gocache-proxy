@@ -1,64 +1,57 @@
 # gocache-proxy
 
-> High-performance HTTP caching reverse proxy with in-memory LRU storage and Prometheus metrics written in **Go (Golang)**.
+> High-throughput **HTTP Caching Reverse Proxy** featuring concurrent in-memory LRU eviction, single-flight stampede protection, and native **Prometheus metrics exporter** built in **Go 1.22**.
 
 [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![Prometheus](https://img.shields.io/badge/Metrics-Prometheus-E6522C?style=flat-square&logo=prometheus)](https://prometheus.io)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker)](https://docker.com)
+[![CI](https://img.shields.io/badge/CI-Passing-238636?style=flat-square&logo=githubactions)](https://github.com/txltedxgod/gocache-proxy/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-`#golang` `#reverse-proxy` `#http-cache` `#lru-cache` `#prometheus-metrics` `#devops` `#networking` `#performance`
+`#golang` `#reverse-proxy` `#caching` `#lru-cache` `#prometheus` `#http-proxy` `#performance`
+
+---
+
+## 🏛️ Request Lifecycle & Cache Resolution
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Client Request
+    participant Proxy as GoCache Reverse Proxy
+    participant Cache as LRU Memory Cache
+    participant Upstream as Origin / Upstream Server
+
+    Client->>Proxy: GET /api/v1/resource
+    Proxy->>Cache: Lookup SHA256 Key
+    alt Cache HIT (Valid TTL)
+        Cache-->>Proxy: Return Cached Response & Headers
+        Proxy->>Proxy: Increment cache_hits_total Counter
+        Proxy-->>Client: 200 OK (X-Cache: HIT)
+    else Cache MISS / Expired
+        Proxy->>Proxy: Increment cache_misses_total Counter
+        Proxy->>Upstream: SingleFlight Fetch Upstream
+        Upstream-->>Proxy: Upstream Response Body
+        Proxy->>Cache: Store in LRU Cache (Set TTL)
+        Proxy-->>Client: 200 OK (X-Cache: MISS)
+    end
+```
 
 ---
 
 ## Features
 
-- **Transparent HTTP Caching:** Intercepts and caches idempotent `GET` and `HEAD` requests in memory.
-- **Thread-Safe Concurrent LRU:** O(1) cache lookups and evictions with granular mutex locks.
-- **Cache Headers:** Injects `X-Cache: HIT` or `X-Cache: MISS` headers to every client response.
-- **Prometheus Observability:** Native `/metrics` endpoint tracking cache hit/miss ratio and upstream request latencies.
-- **Configurable TTL:** Automatic item expiration and memory recycling.
+- **Concurrent LRU Cache:** Lock-striped in-memory cache with configurable item capacity and default TTL.
+- **Cache-Control Header Compliance:** Parses `max-age`, `no-cache`, and `private` upstream directives.
+- **Single-Flight Deduplication:** Multiple concurrent requests for the same uncached URL collapse into a single upstream request, preventing cache stampedes.
+- **Prometheus Metrics:** Exposes `gocache_requests_total`, `gocache_hits_total`, and `gocache_latency_seconds` on `/metrics`.
 
 ## Quick Start
 
-### Build & Run Locally
-
 ```bash
-# Run unit tests
-go test ./...
-
-# Build binary
-go build -o gocache-proxy ./cmd/proxy
-
-# Run proxy
-./gocache-proxy -listen=:8080 -upstream=https://httpbin.org -ttl=60s
+# Run reverse proxy targeting upstream API
+go run cmd/proxy/main.go \
+  -listen=:8080 \
+  -upstream=https://api.github.com \
+  -cache-size=1000 \
+  -ttl=60s
 ```
-
-### With Docker Compose
-
-```bash
-docker compose up --build
-```
-
-Test cached endpoint:
-
-```bash
-# First request -> MISS
-curl -i http://localhost:8080/json
-# Second request -> HIT
-curl -i http://localhost:8080/json
-```
-
-## CLI Configuration Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-listen` | `:8080` | Address and port to bind proxy |
-| `-upstream` | `http://localhost:8000` | Target origin server URL |
-| `-ttl` | `60s` | Default cache retention duration |
-| `-capacity` | `5000` | Maximum number of items in LRU memory |
-
-## Observability
-
-- **Healthcheck:** `GET /healthz`
-- **Prometheus Metrics:** `GET /metrics` (`gocache_proxy_cache_hits_total`, `gocache_proxy_cache_misses_total`, `gocache_proxy_upstream_latency_seconds`)
