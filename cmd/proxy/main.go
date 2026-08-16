@@ -9,6 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/txltedxgod/gocache-proxy/pkg/cache"
+	"github.com/txltedxgod/gocache-proxy/pkg/proxy"
 )
 
 var (
@@ -24,11 +28,19 @@ func main() {
 	log.Printf("[gocache-proxy] Starting on %s -> Upstream: %s (TTL: %v, Capacity: %d)\n",
 		*listenAddr, *upstreamURL, *cacheTTL, *maxCapacity)
 
+	lruCache := cache.NewLRUCache(*maxCapacity)
+	proxyHandler, err := proxy.NewProxyHandler(*upstreamURL, lruCache, *cacheTTL)
+	if err != nil {
+		log.Fatalf("Failed to initialize reverse proxy: %v", err)
+	}
+
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "OK")
+		fmt.Fprintf(w, "OK (Cached items: %d)\n", lruCache.Len())
 	})
+	mux.Handle("/", proxyHandler)
 
 	server := &http.Server{
 		Addr:         *listenAddr,
