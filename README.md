@@ -1,5 +1,11 @@
 # gocache-proxy
 
+[![Go CI](https://github.com/txltedxgod/gocache-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/txltedxgod/gocache-proxy/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Go 1.22](https://img.shields.io/badge/go-1.22-00ADD8.svg?logo=go&logoColor=white)](https://golang.org/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C.svg?logo=prometheus&logoColor=white)](https://prometheus.io/)
+
+
 > High-throughput **HTTP Caching Reverse Proxy** featuring concurrent in-memory LRU eviction, single-flight stampede protection, and native **Prometheus metrics exporter** built in **Go 1.22**.
 
 [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go)](https://golang.org)
