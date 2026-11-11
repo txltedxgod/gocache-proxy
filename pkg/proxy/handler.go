@@ -2,8 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -48,14 +46,14 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check Cache
 	if item, found := p.cache.Get(cacheKey); found {
 		metrics.CacheHitsTotal.Inc()
-		w.Header().Set("X-Cache", "HIT")
 		for k, vv := range item.Header {
 			for _, v := range vv {
 				w.Header().Add(k, v)
 			}
 		}
+		w.Header().Set("X-Cache", "HIT")
 		w.WriteHeader(item.StatusCode)
-		w.Write(item.Body)
+		_, _ = w.Write(item.Body)
 		return
 	}
 
@@ -69,13 +67,14 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	metrics.UpstreamLatency.Observe(duration.Seconds())
 
-	// Cache successful 200 responses
+	// Cache successful 2xx responses without persisting X-Cache: MISS
 	if rec.statusCode >= 200 && rec.statusCode < 300 {
-		rec.Header().Set("X-Cache", "MISS")
+		cachedHeaders := rec.Header().Clone()
+		cachedHeaders.Del("X-Cache")
 		p.cache.Set(cacheKey, &cache.ResponseItem{
 			StatusCode: rec.statusCode,
-			Header:     rec.Header().Clone(),
-			Body:       rec.body.Bytes(),
+			Header:     cachedHeaders,
+			Body:       bytes.Clone(rec.body.Bytes()),
 			ExpiresAt:  time.Now().Add(p.defaultTTL),
 		})
 	}
@@ -83,8 +82,9 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type responseRecorder struct {
 	http.ResponseWriter
-	statusCode int
-	body       *bytes.Buffer
+	statusCode  int
+	wroteHeader bool
+	body        *bytes.Buffer
 }
 
 func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
@@ -96,11 +96,21 @@ func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
 }
 
 func (r *responseRecorder) WriteHeader(code int) {
+	if r.wroteHeader {
+		return
+	}
+	r.wroteHeader = true
 	r.statusCode = code
+	if code >= 200 && code < 300 {
+		r.ResponseWriter.Header().Set("X-Cache", "MISS")
+	}
 	r.ResponseWriter.WriteHeader(code)
 }
 
 func (r *responseRecorder) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
 	r.body.Write(b)
 	return r.ResponseWriter.Write(b)
 }

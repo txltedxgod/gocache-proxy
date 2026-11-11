@@ -3,13 +3,13 @@
 all: test
 
 test:
-	go test ./...
+	go test -race ./...
 
 run:
-	go run main.go
+	go run ./cmd/proxy
 
 lint:
-	@echo "Running lint checks..."
+	go vet ./...
 
 clean:
 	@echo "Cleaning artifacts..."
